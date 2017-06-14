@@ -1,0 +1,21 @@
+{
+  "name": "validator-domain-verifier",
+  "version": "0.0.1",
+  "description": "two-way cryptographic link between ripple validator and domain",
+  "main": "lib/",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "ripple",
+    "crypto",
+    "money"
+  ],
+  "author": "Brandon Wilson",
+  "license": "ISC",
+  "dependencies": {
+    "ripple-address-codec": "^2.0.1",
+    "ripple-keypairs": "^0.10.0",
+    "validator": "^7.0.0"
+  }
+}
