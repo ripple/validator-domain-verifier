@@ -35,8 +35,8 @@ function verifyDomain(domain, valPubKey, domainSig, valPubSig, certificate) {
   }
 
   try {
-    // execSync('openssl dgst -md5 -verify <(openssl x509 -in <(echo "' + certificate + '") -pubkey -noout) -signature <(xxd -r -p <(echo "'+valPubSig+'")) <(echo '+valPubKey+') 2>/dev/null', { "shell": "/bin/bash" })
     execSync('openssl dgst -verify <(openssl x509 -in <(echo "' + certificate + '") -pubkey -noout) -signature <(xxd -r -p <(echo "'+valPubSig+'")) <(echo '+valPubKey+') 2>/dev/null', { "shell": "/bin/bash" })
+    // console.log(execSync('openssl dgst -verify <(openssl x509 -in <(echo "' + certificate + '") -pubkey -noout) -signature <(xxd -r -p <(echo "'+valPubSig+'")) <(echo '+valPubKey+') 2>/dev/null', { "shell": "/bin/bash" }))
   } catch (err) {
     throw 'invalid SSL signature'
   }
