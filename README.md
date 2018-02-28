@@ -1,17 +1,14 @@
 # Validator Domain Verifier
 
-Verifies Ripple validator domain verification signatures
+Verifies Ripple validator domain verification signatures in Google Sheet and reports to Slack
+
 https://ripple.com/build/rippled-setup/#domain-verification
 
 ## Usage
 
 ````
 npm install
-npm start
+WEBHOOK_URI=<slack-webhook-uri> SPREADSHEET_ID=<google-sheet-id> SHEET_TITLE=<sheet-title> npm start
 ````
 
-To verify a new validator, add its information to
-[validators.json](validators.json)
-
-If its SSL certificate cannot be retrieved from the domain, the path to a local
-copy of the certificate can be added to the entry in validators.json
+Google Sheets API service account credentials are expected to be in privatekeys.json in the project root directory.
