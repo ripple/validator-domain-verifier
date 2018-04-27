@@ -82,8 +82,9 @@ function bytesToHex(a) {
 }
 
 function verifyDomain(domain, valPubKey, valPubSig, domainSig) {
-  if (!validator.isFQDN(domain) || !validator.isHexadecimal(domainSig) ||
-      !validator.isHexadecimal(valPubSig)) {
+  if (domain===undefined || !validator.isFQDN(domain) ||
+      domainSig===undefined || !validator.isHexadecimal(domainSig) ||
+      valPubSig===undefined || !validator.isHexadecimal(valPubSig)) {
     throw 'invalid input'
   }
 
@@ -137,9 +138,9 @@ function verifyDomains() {
         } catch (err) {
           writeCell('G' + row, err)
         }
-
-        messageSlack(verified)
       }
+
+      messageSlack(verified)
     })
   })
 }
