@@ -1,9 +1,10 @@
 const CronJob = require('cron').CronJob
 const decodeNodePublic = require('ripple-address-codec').decodeNodePublic
 const execSync = require('child_process').execSync
+const fs = require('fs')
 const {google} = require('googleapis')
 const privatekey = require("./privatekey.json")
-const promisify = require('util.promisify');
+const promisify = require('util.promisify')
 const Slack = require('slack-node')
 const validator = require('validator')
 const verify = require('ripple-keypairs').verify
@@ -17,6 +18,9 @@ const updateSheetValues = promisify(sheets.spreadsheets.values.update)
 
 const SPREADSHEET_ID = process.env['SPREADSHEET_ID']
 const SHEET_TITLE = process.env['SHEET_TITLE']
+const CONFIG_FILE = process.env['VALIDATORS_CONFIG']
+
+const validatorsConfig = require(CONFIG_FILE)
 
 let jwtClient = new google.auth.JWT(
   privatekey.client_email,
@@ -24,20 +28,8 @@ let jwtClient = new google.auth.JWT(
   privatekey.private_key,
   ['https://www.googleapis.com/auth/spreadsheets'])
 
-function messageSlack (verified) {
-  if (!verified.length)
-    return
-
-  console.log(verified)
-
-  let message = 'New verified domains\n```\n'
-
-  for (let val of verified) {
-    console.log(val)
-    message += '    "' + val.pubKey + '" : "' + val.domain + '",\n'
-  }
-
-  message += '```'
+function messageSlack (message) {
+  console.log(message)
 
   slack.webhook({
     text: message
@@ -121,26 +113,40 @@ function verifyDomains() {
 
     const startRow = 2
     getRows().then(data => {
-      let verified = []
+      let verified = {}
       for (let i=0; i<data.length; i++) {
         if (data[i].length >= 6)
           continue // already checked
 
         const row = startRow + i
         try {
-          console.log('verifying', data[i][1], data[i][0])
+          const domain = data[i][0]
+          const pubkey = data[i][1]
+          console.log('verifying', pubkey, domain)
           verifyDomain(...data[i])
           writeCell('G' + row, 'valid')
-          verified.push({
-            domain: data[i][0],
-            pubKey: data[i][1]
-          })
+          verified[pubkey] = domain
+
+          validatorsConfig["validator-domains"][pubkey] = domain
         } catch (err) {
           writeCell('G' + row, err)
         }
       }
 
-      messageSlack(verified)
+      if (Object.keys(verified).length) {
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(validatorsConfig, null, 2), err => {
+          if (err) {
+            messageSlack('Error writing new verified domain(s) to ' + CONFIG_FILE + ':\n```' +
+              JSON.stringify(verified, null, 2) + '```')
+          } else {
+            messageSlack('Added new verified domain(s): \n```' +
+              JSON.stringify(verified, null, 2) + '```')
+          }
+        })
+
+      } else {
+        messageSlack('No new verified domains')
+      }
     })
   })
 }
