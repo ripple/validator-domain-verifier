@@ -6,7 +6,7 @@ Verifies XRP Ledger [validator domain verification](https://developers.ripple.co
 
 ````
 npm install
-SPREADSHEET_ID=<google-sheet-id> SHEET_TITLE=<sheet-title> VALIDATORS_CONFIG=<config-file-path> WEBHOOK_URI=<slack-webhook-uri> npm start
+SPREADSHEET_ID=<google-sheet-id> SHEET_TITLE=<sheet-title> SHEETS_CLIENT_EMAIL=<client-email> SHEETS_PRIVATE_KEY=<private-key> VALIDATORS_CONFIG=<config-file-path> WEBHOOK_URI=<slack-webhook-uri> npm start
 ````
 
-Google Sheets API service account credentials are expected to be in privatekeys.json in the project root directory.
+SHEETS_CLIENT_EMAIL and SHEETS_PRIVATE_KEY correspond to the Google Sheets API service account credentials.

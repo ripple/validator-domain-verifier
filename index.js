@@ -3,7 +3,6 @@ const decodeNodePublic = require('ripple-address-codec').decodeNodePublic
 const execSync = require('child_process').execSync
 const fs = require('fs')
 const {google} = require('googleapis')
-const privatekey = require("./privatekey.json")
 const promisify = require('util.promisify')
 const Slack = require('slack-node')
 const validator = require('validator')
@@ -23,9 +22,9 @@ const CONFIG_FILE = process.env['VALIDATORS_CONFIG']
 const validatorsConfig = require(CONFIG_FILE)
 
 let jwtClient = new google.auth.JWT(
-  privatekey.client_email,
+  process.env['SHEETS_CLIENT_EMAIL'],
   null,
-  privatekey.private_key,
+  process.env['SHEETS_PRIVATE_KEY'],
   ['https://www.googleapis.com/auth/spreadsheets'])
 
 function messageSlack (message) {
