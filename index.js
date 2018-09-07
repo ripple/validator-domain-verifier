@@ -145,14 +145,14 @@ function verifyDomains() {
         })
 
       } else {
-        messageSlack('No new verified domains')
+        console.log('No new verified domains')
       }
     })
   })
 }
 
 const verifyCron = new CronJob({
-  cronTime: '00 00 10 * * 1-5',
+  cronTime: '00 00 * * * *',
   onTick: verifyDomains,
   start: true,
   timeZone: 'America/Los_Angeles'
