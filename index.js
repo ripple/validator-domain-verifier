@@ -3,7 +3,6 @@ const decodeNodePublic = require('ripple-address-codec').decodeNodePublic
 const execSync = require('child_process').execSync
 const fs = require('fs')
 const {google} = require('googleapis')
-const promisify = require('util.promisify')
 const Slack = require('slack-node')
 const validator = require('validator')
 const verify = require('ripple-keypairs').verify
@@ -12,8 +11,6 @@ var slack = new Slack();
 slack.setWebhook(process.env['WEBHOOK_URI']);
 
 const sheets = google.sheets('v4')
-const getSheetValues = promisify(sheets.spreadsheets.values.get)
-const updateSheetValues = promisify(sheets.spreadsheets.values.update)
 
 const SPREADSHEET_ID = process.env['SPREADSHEET_ID']
 const SHEET_TITLE = process.env['SHEET_TITLE']
@@ -39,7 +36,7 @@ function messageSlack (message) {
 }
 
 function getRows() {
-  return getSheetValues({
+  return sheets.spreadsheets.values.get({
     auth: jwtClient,
     spreadsheetId: SPREADSHEET_ID,
     range: SHEET_TITLE + '!B2:G'
@@ -52,7 +49,7 @@ function getRows() {
 
 function writeCell(cell, value) {
   console.log('writing', value, 'to', cell)
-  return updateSheetValues({
+  return sheets.spreadsheets.values.update({
     auth: jwtClient,
     spreadsheetId: SPREADSHEET_ID,
     range: SHEET_TITLE + '!' + cell,
@@ -151,7 +148,7 @@ function verifyDomains() {
 }
 
 const verifyCron = new CronJob({
-  cronTime: '00 00 * * * *',
+  cronTime: '00 01 * * * *',
   onTick: verifyDomains,
   start: true,
   timeZone: 'America/Los_Angeles'
