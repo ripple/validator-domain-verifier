@@ -130,7 +130,7 @@ function verifyDomains() {
       }
 
       if (Object.keys(verified).length) {
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(validatorsConfig, null, 2), err => {
+        fs.writeFile(CONFIG_FILE, JSON.stringify(validatorsConfig, null, 2), err => {
           if (err) {
             messageSlack('Error writing new verified domain(s) to ' + CONFIG_FILE + ':\n```' +
               JSON.stringify(verified, null, 2) + '```')
