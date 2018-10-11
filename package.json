@@ -15,8 +15,10 @@
   "license": "ISC",
   "dependencies": {
     "cron": "^1.3.0",
+    "dotenv": "^6.1.0",
     "googleapis": "^33.0.0",
     "ripple-address-codec": "^2.0.1",
+    "ripple-hbase-client": "^0.1.15",
     "ripple-keypairs": "^0.10.1",
     "slack-node": "^0.1.8",
     "validator": "^9.4.1"

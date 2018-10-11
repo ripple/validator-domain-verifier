@@ -1,150 +1,68 @@
+require('dotenv').config();
+
 const CronJob = require('cron').CronJob
-const decodeNodePublic = require('ripple-address-codec').decodeNodePublic
-const execSync = require('child_process').execSync
 const fs = require('fs')
-const {google} = require('googleapis')
-const Slack = require('slack-node')
-const validator = require('validator')
-const verify = require('ripple-keypairs').verify
+const slack = require('./lib/slack');
+const sheets = require('./lib/sheets');
+const verifyDomain = require('./lib/verify');
+const hbase = require('./lib/hbase');
+const START_ROW = 2;
 
-var slack = new Slack();
-slack.setWebhook(process.env['WEBHOOK_URI']);
-
-const sheets = google.sheets('v4')
-
-const SPREADSHEET_ID = process.env['SPREADSHEET_ID']
-const SHEET_TITLE = process.env['SHEET_TITLE']
-const CONFIG_FILE = process.env['VALIDATORS_CONFIG']
-
-const validatorsConfig = require(CONFIG_FILE)
-
-let jwtClient = new google.auth.JWT(
-  process.env['SHEETS_CLIENT_EMAIL'],
-  null,
-  process.env['SHEETS_PRIVATE_KEY'],
-  ['https://www.googleapis.com/auth/spreadsheets'])
-
-function messageSlack (message) {
-  console.log(message)
-
-  slack.webhook({
-    text: message
-  }, function(err, response) {
-    if (err)
-      console.log(err)
+const saveDomain = data => {
+  return hbase.saveDomain(data)
+  .then(() => {
+    sheets.writeCell(data.cell, 'valid')
+    slack.sendVerified(data);
+    return true;
   })
-}
-
-function getRows() {
-  return sheets.spreadsheets.values.get({
-    auth: jwtClient,
-    spreadsheetId: SPREADSHEET_ID,
-    range: SHEET_TITLE + '!B2:G'
-  }).then(resp => {
-    return resp.data.values ? resp.data.values : []
-  }).catch(err => {
-    console.log(err)
+  .catch(err => {
+    sheets.writeCell(data.cell, err);
+    slack.sendError(data, err);
+    console.log(err);
+    return false;
   })
-}
+};
 
-function writeCell(cell, value) {
-  console.log('writing', value, 'to', cell)
-  return sheets.spreadsheets.values.update({
-    auth: jwtClient,
-    spreadsheetId: SPREADSHEET_ID,
-    range: SHEET_TITLE + '!' + cell,
-    valueInputOption: 'RAW',
-    resource: {
-      values: [[value]]
-    }
-  }).catch(err => {
-    console.log('failed to write', value, 'to', cell)
-  })
-}
-
-function bytesToHex(a) {
-  return a.map(function(byteValue) {
-    const hex = byteValue.toString(16).toUpperCase()
-    return hex.length > 1 ? hex : '0' + hex
-  }).join('')
-}
-
-function verifyDomain(domain, valPubKey, valPubSig, domainSig) {
-  if (domain===undefined || !validator.isFQDN(domain) ||
-      domainSig===undefined || !validator.isHexadecimal(domainSig) ||
-      valPubSig===undefined || !validator.isHexadecimal(valPubSig)) {
-    throw 'invalid input'
+const handleDomain = async (d,i) => {
+  if (d.length >= 6) {
+    return; // already checked
   }
 
-  if (!verify(new Buffer(domain, 'ascii').toString('hex'),
-              domainSig, bytesToHex(decodeNodePublic(valPubKey)))) {
-    throw 'invalid validator signature'
-  }
-
-  let certificate
-  try {
-    certificate = new Buffer(execSync(
-      'openssl s_client -servername ' + domain + ' -connect ' + domain + ':443 </dev/null 2>/dev/null|openssl x509', { "shell": "/bin/bash" })).toString()
-  } catch (err) {
-    throw 'missing SSL certificate'
-  }
+  const cell = `G${START_ROW + i}`;
+  const domain = d[0];
+  const pubkey = d[1];
 
   try {
-    execSync('openssl dgst -verify <(openssl x509 -in <(echo "' + certificate + '") -pubkey -noout) -signature <(xxd -r -p <(echo "'+valPubSig+'")) <(echo '+valPubKey+') 2>/dev/null', { "shell": "/bin/bash" })
+    console.log('verifying', pubkey, domain, cell)
+    verifyDomain(...d)
+    return { domain, pubkey, cell };
+
   } catch (err) {
-    try {
-      execSync('openssl dgst -verify <(openssl x509 -in <(echo "' + certificate + '") -pubkey -noout) -signature <(xxd -r -p <(echo "'+valPubSig+'")) <(echo -n '+valPubKey+') 2>/dev/null', { "shell": "/bin/bash" })
-    } catch (err) {
-      throw 'invalid SSL signature'
-    }
+    sheets.writeCell(cell, err);
   }
 }
 
-function verifyDomains() {
-  jwtClient.authorize(function (err, tokens) {
-    if (err) {
-      console.log(err)
-      return
-    }
+const verifyDomains = () => {
+  console.log('starting domain verification');
+  sheets.authorize()
+  .then(async () => {
 
-    const startRow = 2
-    getRows().then(data => {
-      let verified = {}
-      for (let i=0; i<data.length; i++) {
-        if (data[i].length >= 6)
-          continue // already checked
+    const data = await sheets.getRows();
+    const length = data.filter(d => d.length < 6).length;
+    console.log(`${length} new rows`);
 
-        const row = startRow + i
-        try {
-          const domain = data[i][0]
-          const pubkey = data[i][1]
-          console.log('verifying', pubkey, domain)
-          verifyDomain(...data[i])
-          writeCell('G' + row, 'valid')
-          verified[pubkey] = domain
+    return Promise.all(data.map(handleDomain))
+    .then(data => data.filter(d => Boolean(d)))
+    .then(verified => {
 
-          validatorsConfig["validator-domains"][pubkey] = domain
-        } catch (err) {
-          writeCell('G' + row, err)
-        }
-      }
-
-      if (Object.keys(verified).length) {
-        fs.writeFile(CONFIG_FILE, JSON.stringify(validatorsConfig, null, 2), err => {
-          if (err) {
-            messageSlack('Error writing new verified domain(s) to ' + CONFIG_FILE + ':\n```' +
-              JSON.stringify(verified, null, 2) + '```')
-          } else {
-            messageSlack('Added new verified domain(s): \n```' +
-              JSON.stringify(verified, null, 2) + '```')
-          }
-        })
-
-      } else {
-        console.log('No new verified domains')
-      }
-    })
+      return Promise.all(verified.map(saveDomain))
+      .then(resp => {
+        const count = resp.filter(d => d).length;
+        console.log(`${count} domains added`);
+      });
+    });
   })
+  .catch(console.log);
 }
 
 const verifyCron = new CronJob({
@@ -153,3 +71,5 @@ const verifyCron = new CronJob({
   start: true,
   timeZone: 'America/Los_Angeles'
 });
+
+verifyDomains();
