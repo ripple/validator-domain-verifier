@@ -6,60 +6,91 @@ const slack = require('./lib/slack');
 const sheets = require('./lib/sheets');
 const verifyDomain = require('./lib/verify');
 const hbase = require('./lib/hbase');
-const START_ROW = 2;
 
-const saveDomain = data => {
-  return hbase.saveDomain(data)
+const saveDomains = domains => {
+  return hbase.saveDomains(domains)
   .then(() => {
-    sheets.writeCell(data.cell, 'valid')
-    slack.sendVerified(data);
-    return true;
+    domains.forEach(d => {
+      sheets.writeCell(d.cell, 'valid')
+      slack.sendVerified(d);
+    });
+    console.log(`${domains.length} domains added`)
   })
   .catch(err => {
-    sheets.writeCell(data.cell, err);
-    slack.sendError(data, err);
+    domains.forEach(d => {
+      sheets.writeCell(d.cell, err);
+      slack.sendError(d, err);
+    });
+    console.log(`0 domains added`)
     console.log(err);
-    return false;
   })
 };
 
-const handleDomain = async (d,i) => {
-  if (d.length >= 6) {
-    return; // already checked
-  }
+const deleteDomains = domains => {
+  return hbase.deleteDomains(domains)
+  .then(() => {
+    domains.forEach(d => {
+      sheets.writeCell(d.cell, d.err)
+      slack.sendDeleted(d);
+    });
 
-  const cell = `G${START_ROW + i}`;
-  const domain = d[0];
-  const pubkey = d[1];
+    console.log(`${domains.length} domains deleted`)
+  })
+  .catch(err => {
+    console.log(`0 domains deleted`)
+    console.log(err);
+  })
+};
+
+const handleDomain = (collectInvalid = true, d) => {
+  const domain = d.data[0];
+  const pubkey = d.data[1];
 
   try {
-    console.log('verifying', pubkey, domain, cell)
-    verifyDomain(...d)
-    return { domain, pubkey, cell };
+    console.log('verifying', pubkey, domain, d.cell)
+    verifyDomain(...d.data);
+    if (!collectInvalid) {
+      return { domain, pubkey, cell: d.cell };
+    }
 
   } catch (err) {
-    sheets.writeCell(cell, err);
+    if (collectInvalid) {
+      return { domain, pubkey, cell: d.cell, err };
+    } else {
+      sheets.writeCell(d.cell, err);
+    }
   }
 }
 
-const verifyDomains = () => {
-  console.log('starting domain verification');
+const verifyNewDomains = () => {
+  console.log('starting new domain verification');
   sheets.authorize()
   .then(async () => {
-
     const data = await sheets.getRows();
-    const length = data.filter(d => d.length < 6).length;
-    console.log(`${length} new rows`);
+    console.log(`${data.length} new rows`);
 
-    return Promise.all(data.map(handleDomain))
+    return Promise.all(data.map(handleDomain.bind(null, false)))
     .then(data => data.filter(d => Boolean(d)))
     .then(verified => {
+      setTimeout(saveDomains, 1000, verified);
+    });
+  })
+  .catch(console.log);
+}
 
-      return Promise.all(verified.map(saveDomain))
-      .then(resp => {
-        const count = resp.filter(d => d).length;
-        console.log(`${count} domains added`);
-      });
+const checkVerifiedDomains = () => {
+  console.log('checking verified domains');
+  sheets.authorize()
+  .then(async () => {
+    const data = await sheets.getRows(true);
+    const verified = data.filter(d => d.data[5] === 'valid');
+    console.log(`${verified.length} verified domains`);
+
+    return Promise.all(verified.map(handleDomain.bind(null, true)))
+    .then(data => data.filter(d => Boolean(d)))
+    .then(invalid => {
+      console.log(`${invalid.length} domains no longer valid`);
+      setTimeout(deleteDomains, 1000, invalid);
     });
   })
   .catch(console.log);
@@ -67,9 +98,16 @@ const verifyDomains = () => {
 
 const verifyCron = new CronJob({
   cronTime: '00 01 * * * *',
-  onTick: verifyDomains,
+  onTick: verifyNewDomains,
   start: true,
   timeZone: 'America/Los_Angeles'
 });
 
-verifyDomains();
+const checkCron = new CronJob({
+  cronTime: '00 01 01 * * *',
+  onTick: checkVerifiedDomains,
+  start: true,
+  timeZone: 'America/Los_Angeles'
+});
+
+verifyNewDomains();
