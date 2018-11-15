@@ -35,10 +35,12 @@ const handleDomain = async (d, recheck) => {
 
   return sheets.writeCell(d.cell, result)
   .then(() => {
-    return Promise.all([
-      slack.send(d.data[1], d.data[0], result, recheck),
-      mail.notify(d.data, result)
-    ]);
+    if (d.data[1]) {
+      return Promise.all([
+        slack.send(d.data[1], d.data[0], result, recheck),
+        mail.notify(d.data, result)
+      ]);
+    }
   })
   .catch(console.log)
 };
