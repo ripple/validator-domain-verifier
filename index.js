@@ -85,7 +85,7 @@ const checkVerifiedDomains = () => {
   sheets.authorize()
   .then(async () => {
     const data = await sheets.getRows(true);
-    const verified = data.filter(d => d.data[5] === 'valid');
+    const verified = data.filter(d => d.data[5] === 'valid' && d.data[6] === undefined);
     console.log(`${verified.length} verified domains`);
     return handleDomains(verified, true);
   })
